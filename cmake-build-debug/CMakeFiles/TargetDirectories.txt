@@ -1,3 +1,0 @@
-/home/raycalm/Documents/ufrj/23-2/compiladores/analis_lexico/cmake-build-debug/CMakeFiles/analis_lexico.dir
-/home/raycalm/Documents/ufrj/23-2/compiladores/analis_lexico/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/raycalm/Documents/ufrj/23-2/compiladores/analis_lexico/cmake-build-debug/CMakeFiles/rebuild_cache.dir
