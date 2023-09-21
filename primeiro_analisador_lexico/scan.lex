@@ -20,10 +20,14 @@ _INT         {DIGITO}+
 CIFRAO      "$"
 UNDERLINE   "_"
 WS	        [ \t\n]
+MAIG [>=]
 
 
 %%
     /* Padrões e ações. Nesta seção, comentários devem ter um tab antes */
+[fF][oO][rR] { lexema = yytext; return _FOR; }
+[iI][fF]     { lexema = yytext; return _IF; }
+
 ({CIFRAO})?({LETRA}|{UNDERLINE})({LETRA}|{DIGITO}|{UNDERLINE})* { lexema = yytext; return _ID; }
 ({CIFRAO}){DIGITO}+({LETRA}|{DIGITO}|{UNDERLINE})?              { lexema = yytext; return _ID; }
 
@@ -32,21 +36,19 @@ WS	        [ \t\n]
 ({_INT})\.({_INT})([eE][+-]?({_INT}))? { lexema = yytext; return _FLOAT; }
 ({_INT})[eE][+-]?({_INT})              { lexema = yytext; return _FLOAT; }
 
-[fF][oO][rR] { lexema = yytext; return _FOR; }
-[iI][fF]     { lexema = yytext; return _FOR; }
-
-">=" { lexema == yytext; return _MAIG; }
-"<=" { lexema == yytext; return _MEIG; }
-"==" { lexema == yytext; return _IG; }
-"!=" { lexema == yytext; return _DIF; }
+>= { cout << _MAIG << " " << yytext << endl; }
+    /* [<=] { lexema == yytext; return _MEIG; }
+    [==] { lexema == yytext; return _IG; }
+    [!=] { lexema == yytext; return _DIF; } */
 
 
 
 
 {WS}	{ /* ignora espaços, tabs e '\n' */ } 
 
-.       { return *yytext; 
-          /* Essa deve ser a última regra. Dessa forma qualquer caractere isolado será retornado pelo seu código ascii. */ }
+.   { lexema = yytext; return *yytext;
+    /* Essa deve ser a última regra. Dessa forma qualquer caractere isolado será retornado pelo seu código ascii. */ 
+}
 
 %%
 
