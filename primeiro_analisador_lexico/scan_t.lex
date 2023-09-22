@@ -12,37 +12,37 @@ string lexema;
 #include <string>
 #include <algorithm>
 
-std::string removeDoubleQuotes(std::string str) {
-    std::string stringOp = str;
+std::string treatDoubleQuotes(std::string str) {
+    std::string lexema = yytext;
+    lexema = lexema.substr(1, lexema.length() - 2);
 
-    if (stringOp.front() == '"' && stringOp.back() == '"') {
-        stringOp = stringOp.substr(1, stringOp.length() - 2);
+    size_t pos = lexema.find("\\\"");
+    while (pos != std::string::npos) {
+        lexema.replace(pos, 2, "\"");
+        pos = lexema.find("\\\"", pos + 1);
     }
-
-    return stringOp;
+    return lexema;
 }
 
-std::string removeDoubleSingleQuotes(std::string str) {
-    std::string originalString = str;
-    std::string resultString;
-    char nonChar = '\0';
+std::string treatSingleQuotes(std::string str) {
+    std::string lexema = yytext;
+    lexema = lexema.substr(1, lexema.length() - 2);
 
-    for (char c: originalString) {
-        if (!(c == '\'' && nonChar == c)) {
-            resultString += c;
-        }
-        nonChar = c;
+    size_t pos = lexema.find("\\'");
+    while (pos != std::string::npos) {
+        lexema.replace(pos, 2, "'");
+        pos = lexema.find("\\'", pos + 1);
     }
-    return resultString;
+    return lexema;
 }
 
+std::string treatBackticks(std::string str) {
+    std::string lexema = yytext;
+    lexema = lexema.substr(1, lexema.length() - 2);
 
-std::string treatString(std::string str) {
-    std::string newString = removeDoubleQuotes(str);
-    newString = removeDoubleSingleQuotes(newString);
-
-    return newString;
+    return lexema;
 }
+
 
 %}
 
@@ -79,16 +79,18 @@ MAIG [>=]
 (==) { cout << _IG << " " << yytext << endl; }
 (!=) { cout << _DIF << " " << yytext << endl; }
 
-\"([^\"\\]|\\.)*\" { lexema = treatString(yytext); return _STRING; }
+\"(\\.|[^\"])*\" { lexema = treatDoubleQuotes(yytext); return _STRING; }
 
-\'([^\'\\]|\\.)*\' { lexema = treatString(yytext); return _STRING; }
+\'(\\.|[^\'])*\' { lexema = treatSingleQuotes(yytext); return _STRING; }
 
+\`[^\`]+\` { lexema = treatBackticks(yytext); return _STRING2; }
 
+({CIFRAO})\{[^\}]+\} { lexema = yytext; return _EXPR; }
 
-{WS}	{ /* ignora espaços, tabs e '\n' */ } 
+{WS}	{ /* ignora espaços, tabs e '\n' */ }
 
 .   { lexema = yytext; return *yytext;
-    /* Essa deve ser a última regra. Dessa forma qualquer caractere isolado será retornado pelo seu código ascii. */ 
+    /* Essa deve ser a última regra. Dessa forma qualquer caractere isolado será retornado pelo seu código ascii. */
 }
 
 %%
