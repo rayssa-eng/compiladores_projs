@@ -1,26 +1,43 @@
 %{
-#include <iostream>
 #include <string>
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
 #include <vector>
 #include <map>
+#include <algorithm>
 
 using namespace std;
 
-int linha = 1, coluna = 0; 
+int linha = 1, coluna = 0;
+// string lexema; 
 
 struct Atributos {
   vector<string> c; // Código
 
   int linha = 0, coluna = 0;
 
+  // Só para argumentos e parâmetros
+  int n_args = 0;     
+  
+  // Só para valor default de argumento        
+  vector<string> valor_default; 
+
   void clear() {
     c.clear();
+    valor_default.clear();
     linha = 0;
     coluna = 0;
+    n_args = 0;
   }
 };
 
 enum TipoDecl { Let = 1, Const, Var };
+map<TipoDecl, string> nomeTipoDecl = { 
+  { Let, "let" }, 
+  { Const, "const" }, 
+  { Var, "var" }
+};
 
 struct Simbolo {
   TipoDecl tipo;
@@ -28,10 +45,16 @@ struct Simbolo {
   int coluna;
 };
 
-map< string, Simbolo > ts; // Tabela de símbolos
+int in_func = 0;
+bool in_scope = false;
+
+// Tabela de símbolos - agora é uma pilha
+vector< map< string, Simbolo > > ts = { map< string, Simbolo >{} }; 
+vector<string> funcoes;
 
 vector<string> declara_var( TipoDecl tipo, string nome, int linha, int coluna );
 void checa_simbolo( string nome, bool modificavel );
+
 
 #define YYSTYPE Atributos
 
@@ -56,6 +79,10 @@ vector<string> operator+( vector<string> a, string b ) {
 vector<string> operator+( string a, vector<string> b ) {
   return vector<string>{ a } + b;
 }
+
+// bool operator!=(vector<string> a, vector<string> b) {
+//   return a != b;
+// }
 
 vector<string> resolve_enderecos( vector<string> entrada ) {
   map<string,int> label;
@@ -84,46 +111,132 @@ void print( vector<string> codigo ) {
     
   cout << endl;  
 }
+
 %}
 
-%token ID IF ELSE LET CONST VAR PRINT FOR WHILE
-%token CDOUBLE CSTRING CINT
-%token AND OR ME_IG MA_IG DIF IGUAL
+%token IF ELSE FOR WHILE LET CONST VAR OBJECT FUNCTION ASM RETURN
+%token ID CDOUBLE CSTRING CINT BOOL
+%token AND OR DIF IGUAL
 %token MAIS_IGUAL MAIS_MAIS
 
 %right '='
-%nonassoc '<' '>'
+%nonassoc IF ELSE IGUAL MAIS_IGUAL MAIS_MAIS MA_IG ME_IG DIF
+%nonassoc '<' '>' 
+%left AND OR
 %left '+' '-'
 %left '*' '/' '%'
-
-%left '['
+%right '[' '(' '{'
 %left '.'
 
 
 %%
 
-S : CMDs { print( resolve_enderecos( $1.c + "." ) ); }
+S : CMDs { print( resolve_enderecos( $1.c + "." + funcoes ) ); }
   ;
 
 CMDs : CMDs CMD  { $$.c = $1.c + $2.c; };
      |           { $$.clear(); }
      ;
+            
      
 CMD : CMD_LET ';'
     | CMD_VAR ';'
     | CMD_CONST ';'
     | CMD_IF
-    | PRINT E ';' 
-      { $$.c = $2.c + "println" + "#"; }
-    | CMD_FOR  
-    | CMD_FOR ';'
-    | CMD_WHILE ';'
+    | CMD_FUNC
+    | RETURN E ';'
+      { $$.c = $2.c + "'&retorno'" + "@" + "~"; }
+    /* | PRINT E ';' 
+      { $$.c = $2.c + "println" + "#"; } */
+    | CMD_FOR
+    | E ASM ';' 	{ $$.c = $1.c + $2.c + "^"; }
     | E ';'
       { $$.c = $1.c + "^"; };
-    | E ';' ';'
-      { $$.c = $1.c + "^"; };
-    | '{' CMDs '}'  
-      { $$.c = $2.c; }
+    | ';'
+      { $$.clear(); };
+    | '{' EMPILHA_TS CMDs '}'
+      { ts.pop_back();
+        $$.c = vector<string>{"<{"} + $3.c + vector<string>{"}>"};  }
+    ;
+
+EMPILHA_TS : { ts.push_back( map< string, Simbolo >{} ); } 
+           ;
+   
+CMD_FUNC : FUNCTION ID { declara_var( Var, $2.c[0], $2.linha, $2.coluna ); } 
+             '(' EMPILHA_TS LISTA_ARGs ')' '{' CMDs '}'
+           { 
+             string lbl_endereco_funcao = gera_label( "func_" + $2.c[0] );
+             string definicao_lbl_endereco_funcao = ":" + lbl_endereco_funcao;
+             
+             $$.c = $2.c + "&" + $2.c + "{}"  + "=" + "'&funcao'" +
+                    lbl_endereco_funcao + "[=]" + "^";
+             funcoes = funcoes + definicao_lbl_endereco_funcao + $6.c + $9.c +
+                       "undefined" + "@" + "'&retorno'" + "@"+ "~";
+             ts.pop_back(); 
+             in_scope = false;
+           }
+         ;
+
+         
+LISTA_ARGs : ARGs
+           | { $$.clear(); }
+           ;
+           
+ARGs : ARGs ',' ARG  
+       { // a & a arguments @ 0 [@] = ^ 
+         $$.c = $1.c + $3.c + "&" + $3.c + "arguments" + "@" + to_string( $1.n_args )
+                + "[@]" + "=" + "^"; 
+        in_scope = true; 
+         if( $3.valor_default.size() > 0 ) {
+           string lbl_true = gera_label( "lbl_true" );
+           string lbl_fim_if = gera_label( "lbl_fim_if" );
+           string definicao_lbl_true = ":" + lbl_true;
+           string definicao_lbl_fim_if = ":" + lbl_fim_if;
+           $$.c = $$.c + declara_var( Var, "placeholder", 1, 1 ) + 
+                 $3.c + "@" + "placeholder" + "@" + "!=" +
+                 lbl_true + "?" + $3.c + $3.valor_default + "=" + "^" +
+                 lbl_fim_if + "#" +
+                 definicao_lbl_true + 
+                 definicao_lbl_fim_if
+                 ;
+         }
+         $$.n_args = $1.n_args + $3.n_args; 
+       }
+     | ARG 
+       { // a & a arguments @ 0 [@] = ^ 
+         $$.c = $1.c + "&" + $1.c + "arguments" + "@" + "0" + "[@]" + "=" + "^"; 
+                
+         in_scope = true; 
+         if( $1.valor_default.size() > 0 ) {
+           string lbl_true = gera_label( "lbl_true" );
+           string lbl_fim_if = gera_label( "lbl_fim_if" );
+           string definicao_lbl_true = ":" + lbl_true;
+           string definicao_lbl_fim_if = ":" + lbl_fim_if;
+           $$.c = $$.c + declara_var( Var, "placeholder", 1, 1 ) + 
+                 $1.c + "@" + "placeholder" + "@" + "!=" +
+                 lbl_true + "?" + $1.c + $1.valor_default + "=" + "^" +
+                 lbl_fim_if + "#" +
+                 definicao_lbl_true + 
+                 definicao_lbl_fim_if
+                 ;
+         }
+         $$.n_args = $1.n_args; 
+       }
+     ;
+     
+ARG : ID 
+      { $$.c = $1.c;      
+        $$.n_args = 1;
+        $$.valor_default.clear();
+        declara_var( Let, $1.c[0], $1.linha, $1.coluna ); 
+      }
+    | ID '=' E
+      { // Código do IF
+        $$.c = $1.c;
+        $$.n_args = 1;
+        $$.valor_default = $3.c;         
+        declara_var( Let, $1.c[0], $1.linha, $1.coluna ); 
+      }
     ;
  
 CMD_FOR : FOR '(' PRIM_E ';' E ';' E ')' CMD 
@@ -188,6 +301,7 @@ CONST_VARs : CONST_VAR ',' CONST_VARs { $$.c = $1.c + $3.c; }
 CONST_VAR : ID '=' E
             { $$.c = declara_var( Const, $1.c[0], $1.linha, $1.coluna ) + 
                      $1.c + $3.c + "=" + "^"; }
+           
           ;
   
 CMD_IF : IF '(' E ')' CMD ELSE CMD
@@ -217,7 +331,7 @@ CMD_IF : IF '(' E ')' CMD ELSE CMD
                    ;}
        ;
 
-CMD_WHILE : WHILE '(' E ')' CMD
+/* CMD_WHILE : WHILE '(' E ')' CMD
             { string lbl_while_start = gera_label("while_start");
               string lbl_while_end = gera_label("while_end");
               string lbl_condicao_while = gera_label("while_true");
@@ -233,13 +347,11 @@ CMD_WHILE : WHILE '(' E ')' CMD
                      definicao_lbl_while_end
             ;
             }
-          ;
+          ; */
 
-        
 LVALUE : ID 
        ;
        
-
 LVALUEPROP : E '[' E ']'
               { $$.c = $1.c+ $3.c; }
            | E '.' ID  
@@ -247,6 +359,18 @@ LVALUEPROP : E '[' E ']'
            | E '.' ID '[' E ']'
               { $$.c = $1.c + $3.c + "[@]" + $5.c; }
            ;
+
+LISTA_PARAMs : PARAMs
+           | { $$.clear(); }
+           ;
+             
+PARAMs : PARAMs ',' E
+       { $$.c = $1.c + $3.c;
+         $$.n_args = $1.n_args + 1; }
+     | E
+       { $$.c = $1.c;
+         $$.n_args = $1.n_args + 1; }
+     ;
 
 E : LVALUE '=' '{' '}'
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "{}" + "="; }
@@ -264,12 +388,16 @@ E : LVALUE '=' '{' '}'
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "@" + $3.c + "+" + "="; }
   | LVALUEPROP MAIS_IGUAL E
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "[@]" + $3.c + "+" + "[=]"; }
-  /* | LVALUEPROP MAIS_MAIS
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "[@]" + "1" + "+" + "[=]"; } */
   | LVALUE MAIS_MAIS
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "@" + $1.c + $1.c + "@" + "1" + "+" + "=" + "^"; }
   | LVALUE IGUAL E
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "==";}   
+    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "@" + $3.c + "==";}   
+  | LVALUE DIF E     
+    { $$.c = $1.c + $3.c + "!="; }
+  | E IGUAL E
+    { $$.c = $1.c + $3.c + "=="; }
+  | E DIF E     
+    { $$.c = $1.c + $3.c + "!="; }
   | E '<' E
     { $$.c = $1.c + $3.c + $2.c; }
   | E '>' E
@@ -285,62 +413,79 @@ E : LVALUE '=' '{' '}'
   | E '%' E
     { $$.c = $1.c + $3.c + $2.c; }
   | '-' E
-    { $$.c = "0" + $2.c + $1.c; } 
+    { $$.c = "0" + $2.c + $1.c; }
+  | E '(' LISTA_PARAMs ')'
+    {
+      $$.c = $3.c + to_string( $3.n_args ) + $1.c + "$";
+    } 
   | CDOUBLE
     { $$.c = $1.c; }
   | CINT
     { $$.c = $1.c; }
   | CSTRING
     { $$.c = $1.c; }
-  | LVALUE 
-    { checa_simbolo( $1.c[0], false ); $$.c = $1.c + "@"; } 
-  | LVALUEPROP
-    { checa_simbolo( $1.c[0], false ); $$.c = $1.c + "[@]"; }  
+  | BOOL
+    { $$.c = $1.c; }
+  /* | CMD_FUNC */
+  | LVALUE
+    { if(!in_scope) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "@"; } 
+  | LVALUEPROP 
+    { if(!in_scope) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "[@]"; }  
   | '(' E ')'
-    { $$.c = $2.c; }   
+    { $$.c = $2.c; }
   | '(' '{' '}' ')'
     { $$.c = vector<string>{"{}"}; }
   | '{' '}'
     { $$.c = vector<string>{"{}"}; }
+  | OBJECT
+    {$$.c = vector<string>{"{}"};}
   | '[' ']'
     { $$.c = vector<string>{"[]"}; }
   ;
-
+  
   
 %%
 
 #include "lex.yy.c"
 
 vector<string> declara_var( TipoDecl tipo, string nome, int linha, int coluna ) {
-   /* cerr << "insere_simbolo( " << tipo << ", " << nome 
-       << ", " << linha << ", " << coluna << ")" << endl;  */
+//  cerr << "insere_simbolo( " << tipo << ", " << nome 
+//       << ", " << linha << ", " << coluna << ")" << endl;
        
-  if( ts.count( nome ) == 0 ) {
-    ts[nome] = Simbolo{ tipo, linha, coluna };
+  auto& topo = ts.back();    
+       
+  if( topo.count( nome ) == 0 ) {
+    topo[nome] = Simbolo{ tipo, linha, coluna };
     return vector<string>{ nome, "&" };
   }
-  else if( tipo == Var && ts[nome].tipo == Var ) {
-    ts[nome] = Simbolo{ tipo, linha, coluna };
+  else if( tipo == Var && topo[nome].tipo == Var ) {
+    topo[nome] = Simbolo{ tipo, linha, coluna };
     return vector<string>{};
   } 
   else {
-    cerr << "Erro: a variável '" << nome << "' ja foi declarada na linha " << ts[nome].linha << "." << endl;
+    cerr << "Erro: a variável '" << nome << "' já foi declarada na linha " << topo[nome].linha << "." << endl;
     exit( 1 );     
   }
 }
 
 void checa_simbolo( string nome, bool modificavel ) {
-  if( ts.count( nome ) > 0 ) {
-    if( modificavel && ts[nome].tipo == Const ) {
-      cerr << "Variavel '" << nome << "' não pode ser modificada." << endl;
-      exit( 1 );     
+  for( int i = ts.size() - 1; i >= 0; i-- ) {  
+    auto& atual = ts[i];
+    
+    if( atual.count( nome ) > 0 ) {
+      if( modificavel && atual[nome].tipo == Const ) {
+        cerr << "Variavel '" << nome << "' não pode ser modificada." << endl;
+        exit( 1 );     
+      }
+      else 
+        return;
     }
   }
-  else {
-    cerr << "Erro: a variável '" << nome << "' não foi declarada." << endl;
-    exit( 1 );     
-  }
+
+  cerr << "Variavel '" << nome << "' não declarada." << endl;
+  exit( 1 );     
 }
+
 
 void yyerror( const char* st ) {
    cerr << st << endl; 
@@ -353,3 +498,4 @@ int main( int argc, char* argv[] ) {
   
   return 0;
 }
+
