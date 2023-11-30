@@ -10,6 +10,7 @@ INT	    {D}+
 DOUBLE  {D}+"."{D}+([Ee][+\-]?{D}+)?
 ID      {L}({L}|{D})*
 BOOLEAN    "true"|"false"
+PARENTESES_FUNCAO [)”\.*”=>]
 
 %%
 
@@ -17,9 +18,10 @@ BOOLEAN    "true"|"false"
 " "        { coluna++; }
 "\n"	   { linha++; coluna = 0; }
 
-{DOUBLE}   { return token( CDOUBLE ); }
-{INT}	   { return token( CINT ); }
-{BOOLEAN}  { return token( BOOL ); }
+{DOUBLE}            { return token( CDOUBLE ); }
+{INT}	            { return token( CINT ); }
+{BOOLEAN}           { return token( BOOL ); };
+{PARENTESES_FUNCAO} { return token( PARENTESES_FUNCAO ); };
 
 "{}"       { return token( OBJECT ); }
 "&&"	   { return token( AND ); }
@@ -28,6 +30,8 @@ BOOLEAN    "true"|"false"
 ">="	   { return token( MA_IG ); }
 "!="	   { return token( DIF ); }
 "=="	   { return token( IGUAL ); }
+"SETA"     { return token( SETA ); }
+
 
 "+="       { return token( MAIS_IGUAL ); }
 "++"       { return token( MAIS_MAIS ); }
