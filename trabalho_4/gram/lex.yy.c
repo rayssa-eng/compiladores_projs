@@ -818,7 +818,7 @@ YY_RULE_SETUP
 case 7:
 YY_RULE_SETUP
 #line 24 "simbs.l"
-{ return token( OBJ ); }
+{ return token( OBJECT ); }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
