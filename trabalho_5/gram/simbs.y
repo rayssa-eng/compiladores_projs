@@ -114,12 +114,12 @@ void print( vector<string> codigo ) {
 
 %}
 
-%token IF ELSE FOR WHILE LET CONST VAR OBJECT FUNCTION ASM RETURN
-%token ID CDOUBLE CSTRING CINT BOOL
+%token IF ELSE FOR WHILE LET CONST VAR FUNCTION ASM RETURN
+%token ID CDOUBLE CSTRING CINT BOOL BLVAZIO
 %token AND OR DIF IGUAL
-%token MAIS_IGUAL MAIS_MAIS SETA PARENTESES_FUNCAO
+%token MAIS_IGUAL MAIS_MAIS
 
-%right '=' SETA
+%right '='
 %nonassoc IF ELSE IGUAL MAIS_IGUAL MAIS_MAIS MA_IG ME_IG DIF
 %nonassoc '<' '>' 
 %left AND OR
@@ -146,6 +146,8 @@ CMD : CMD_LET ';'
     | CMD_FUNC
     | RETURN E ';'
       { $$.c = $2.c + "'&retorno'" + "@" + "~"; }
+    /* | PRINT E ';' 
+      { $$.c = $2.c + "println" + "#"; } */
     | CMD_FOR
     | E ASM ';' 	{ $$.c = $1.c + $2.c + "^"; }
     | E ';'
@@ -155,7 +157,11 @@ CMD : CMD_LET ';'
     | '{' EMPILHA_TS CMDs '}'
       { ts.pop_back();
         $$.c = vector<string>{"<{"} + $3.c + vector<string>{"}>"};  }
+    | BLVAZIO
+      { $$.clear(); }
     ;
+
+/* OBJECT : BLVAZIO ; */
 
 EMPILHA_TS : { ts.push_back( map< string, Simbolo >{} ); } 
            ;
@@ -346,6 +352,9 @@ CMD_IF : IF '(' E ')' CMD ELSE CMD
             ;
             }
           ; */
+
+LVALUE : ID 
+       ;
        
 LVALUEPROP : E '[' E ']'
               { $$.c = $1.c+ $3.c; }
@@ -367,11 +376,11 @@ PARAMs : PARAMs ',' E
          $$.n_args = $1.n_args + 1; }
      ;
 
-E : E '=' '{' '}'
+E : ID '=' '{' '}'
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "{}" + "="; }
-  | E '=' '[' ']'
+  | LVALUE '=' '[' ']'
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "[]" + "="; }
-  | ID '=' E 
+  | LVALUE '=' E 
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "="; }
   | LVALUEPROP '=' E
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "[=]"; }
@@ -379,15 +388,15 @@ E : E '=' '{' '}'
   { checa_simbolo( $1.c[0], true ); $$.c = $1.c + vector<string>{"[]"} + "[=]"; } 
   | LVALUEPROP '=' '[' ']'
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + vector<string>{"[]"} + "[=]"; } 
-  | E MAIS_IGUAL E
+  | LVALUE MAIS_IGUAL E
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "@" + $3.c + "+" + "="; }
   | LVALUEPROP MAIS_IGUAL E
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "[@]" + $3.c + "+" + "[=]"; }
-  | E MAIS_MAIS
+  | LVALUE MAIS_MAIS
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "@" + $1.c + $1.c + "@" + "1" + "+" + "=" + "^"; }
-  | ID IGUAL E
+  | LVALUE IGUAL E
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "@" + $3.c + "==";}   
-  | ID DIF E     
+  | LVALUE DIF E     
     { $$.c = $1.c + $3.c + "!="; }
   | E IGUAL E
     { $$.c = $1.c + $3.c + "=="; }
@@ -422,7 +431,7 @@ E : E '=' '{' '}'
   | BOOL
     { $$.c = $1.c; }
   /* | CMD_FUNC */
-  | E
+  | LVALUE
     { if(!in_scope) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "@"; } 
   | LVALUEPROP 
     { if(!in_scope) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "[@]"; }  
@@ -430,21 +439,22 @@ E : E '=' '{' '}'
     { $$.c = $2.c; }
   | '(' '{' '}' ')'
     { $$.c = vector<string>{"{}"}; }
-  | '{' '}'
+  |'{' '}'
     { $$.c = vector<string>{"{}"}; }
-  | OBJECT
-    {$$.c = vector<string>{"{}"};}
   | '[' ']'
     { $$.c = vector<string>{"[]"}; }
-  | ID EMPILHA_TS 
-    { declara_var( Let, $1.c[0], $1.linha, $1.coluna ); } 
-  | SETA E 
-    { ts.pop_back(); }
-  | '('  LISTA_PARAMs PARENTESES_FUNCAO SETA E 
-    { ts.pop_back(); }
   ;
+
+  OBJECT : '{' OBJECT_PROP '}'
+           { {$$.c = "{}" + $2.c;} }
+           ;
   
-  
+  OBJECT_PROP : ID ':' E
+         {$$.c = $1.c + $3.c + "[<=]";}
+         ;
+
+  OBJECT_PROPs : OBJECT_PROP ',' OBJECT_PROPs
+                | OBJECT_PROP
 %%
 
 #include "lex.yy.c"

@@ -10,7 +10,8 @@ INT	    {D}+
 DOUBLE  {D}+"."{D}+([Ee][+\-]?{D}+)?
 ID      {L}({L}|{D})*
 BOOLEAN    "true"|"false"
-PARENTESES_FUNCAO [)”\.*”=>]
+BL_VAZIO \{\s*\}
+PARENTESES_FUNCAO ")”\.*”=>"
 
 %%
 
@@ -21,16 +22,13 @@ PARENTESES_FUNCAO [)”\.*”=>]
 {DOUBLE}            { return token( CDOUBLE ); }
 {INT}	            { return token( CINT ); }
 {BOOLEAN}           { return token( BOOL ); };
-{PARENTESES_FUNCAO} { return token( PARENTESES_FUNCAO ); };
 
-"{}"       { return token( OBJECT ); }
 "&&"	   { return token( AND ); }
 "||"	   { return token( OR ); }
 "<="	   { return token( ME_IG ); }
 ">="	   { return token( MA_IG ); }
 "!="	   { return token( DIF ); }
 "=="	   { return token( IGUAL ); }
-"SETA"     { return token( SETA ); }
 
 
 "+="       { return token( MAIS_IGUAL ); }
@@ -46,6 +44,7 @@ PARENTESES_FUNCAO [)”\.*”=>]
 "while"    { return token( WHILE ); }
 "function" { return token( FUNCTION ); }
 "return"   { return token( RETURN ); }
+{BL_VAZIO} { return token( BLVAZIO );}
 {ID}       { return token( ID ); }
 
 "\""[^\"]*"\"" { yylval.c = vector<string>{ string(yytext + 1, yyleng - 2) }; return token(CSTRING); } { yylval.c = vector<string>{ string(yytext + 1, yyleng - 2) }; return token(CSTRING); }

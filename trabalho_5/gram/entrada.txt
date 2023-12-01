@@ -1,2 +1,9 @@
-let i;
-for( i = 0; i < 10; i++ ) {}
+let o = {
+  campo: 'aba',
+  pi: 31415.0 / 10000.0,
+  obj: { g: 56 }
+};
+{
+  let b = { s:o };
+  0 asm{.};
+}
