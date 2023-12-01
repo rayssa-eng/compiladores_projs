@@ -279,6 +279,10 @@ LET_VAR : ID
           { 
             $$.c = declara_var( Let, $1.c[0], $1.linha, $1.coluna ) + 
                    $1.c + $3.c + "=" + "^"; }
+        | ID '=' OBJECT
+          { 
+            $$.c = declara_var( Let, $1.c[0], $1.linha, $1.coluna ) + 
+                   $1.c + $3.c + "=" + "^"; }
         ;
   
 CMD_VAR : VAR VAR_VARs { $$.c = $2.c; }
@@ -376,18 +380,18 @@ PARAMs : PARAMs ',' E
          $$.n_args = $1.n_args + 1; }
      ;
 
-E : ID '=' '{' '}'
+  E : /* LVALUE '=' '{' '}'
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "{}" + "="; }
-  | LVALUE '=' '[' ']'
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "[]" + "="; }
+  | LVALUE '=' '[' ']' 
+    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "[]" + "="; } */
   | LVALUE '=' E 
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "="; }
   | LVALUEPROP '=' E
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "[=]"; }
-  | LVALUEPROP '=' '{' '}'
-  { checa_simbolo( $1.c[0], true ); $$.c = $1.c + vector<string>{"[]"} + "[=]"; } 
-  | LVALUEPROP '=' '[' ']'
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + vector<string>{"[]"} + "[=]"; } 
+  /* | LVALUEPROP '=' '{' '}'
+  { checa_simbolo( $1.c[0], true ); $$.c = $1.c + vector<string>{"[]"} + "[=]"; }  */
+  /* | LVALUEPROP '=' '[' ']'
+    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + vector<string>{"[]"} + "[=]"; }  */
   | LVALUE MAIS_IGUAL E
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "@" + $3.c + "+" + "="; }
   | LVALUEPROP MAIS_IGUAL E
@@ -437,24 +441,45 @@ E : ID '=' '{' '}'
     { if(!in_scope) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "[@]"; }  
   | '(' E ')'
     { $$.c = $2.c; }
-  | '(' '{' '}' ')'
-    { $$.c = vector<string>{"{}"}; }
-  |'{' '}'
+  | '(' OBJECT ')'
+    { $$.c = $2.c; }
+  | ARRAY
+  /* |'{' '}'
     { $$.c = vector<string>{"{}"}; }
   | '[' ']'
-    { $$.c = vector<string>{"[]"}; }
+    { $$.c = vector<string>{"[]"}; }  */
   ;
 
-  OBJECT : '{' OBJECT_PROP '}'
-           { {$$.c = "{}" + $2.c;} }
+  OBJECT : '{' OBJECT_PROPs '}'
+           { $$.c = "{}" + $2.c; }
            ;
   
   OBJECT_PROP : ID ':' E
-         {$$.c = $1.c + $3.c + "[<=]";}
-         ;
+               { $$.c = $1.c + $3.c + "[<=]"; }
+              | ID ':' OBJECT
+               {$$.c = $1.c + $3.c + "[<=]";}
+             ;
 
-  OBJECT_PROPs : OBJECT_PROP ',' OBJECT_PROPs
-                | OBJECT_PROP
+  OBJECT_PROPs : OBJECT_PROPs ',' OBJECT_PROP
+                 { $$.c = $1.c + $3.c; }
+              | OBJECT_PROP
+              ;
+
+  ARRAY : '[' ARRAY_ELEMs ']'
+          { $$.c = "[]" + $2.c; }
+          ;
+
+  ARRAY_ELEM : E
+             ;
+
+  ARRAY_ELEMs : ARRAY_ELEMs ',' ARRAY_ELEM
+               { $$.c = $1.c + to_string( $1.n_args ) + $3.c + "[<=]";
+                $$.n_args++; }
+              | ARRAY_ELEM
+              { $$.c = to_string( $1.n_args ) + $1.c + "[<=]";
+                $$.n_args++; }
+              ;
+
 %%
 
 #include "lex.yy.c"

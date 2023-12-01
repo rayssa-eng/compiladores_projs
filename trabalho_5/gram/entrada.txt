@@ -1,9 +1,17 @@
-let o = {
-  campo: 'aba',
-  pi: 31415.0 / 10000.0,
-  obj: { g: 56 }
-};
-{
-  let b = { s:o };
-  0 asm{.};
+function log( msg ) {
+  msg asm{println # undefined};
+}
+
+function criaObj() {
+  return { a : [ {}, { teste: 1 }, c=24*8+1 ], b: 'nome', log: x => print(x) };
+}
+
+let obj = [];
+let c;
+{ obj = criaObj();
+let c = [];
+
+log( obj );
+log( obj.a );
+log( obj.a[obj.a[1].teste+1] );
 }
