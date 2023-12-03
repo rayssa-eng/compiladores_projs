@@ -18,7 +18,7 @@ struct Atributos {
   int linha = 0, coluna = 0;
 
   // Só para argumentos e parâmetros
-  int n_args = 0;     
+  int n_args = 0; 
   
   // Só para valor default de argumento        
   vector<string> valor_default; 
@@ -46,7 +46,7 @@ struct Simbolo {
 };
 
 int in_func = 0;
-bool in_scope = false;
+// bool in_scope = false;
 
 // Tabela de símbolos - agora é uma pilha
 vector< map< string, Simbolo > > ts = { map< string, Simbolo >{} }; 
@@ -115,7 +115,7 @@ void print( vector<string> codigo ) {
 %}
 
 %token IF ELSE FOR WHILE LET CONST VAR FUNCTION ASM RETURN
-%token ID CDOUBLE CSTRING CINT BOOL BLVAZIO
+%token ID CDOUBLE CSTRING CINT BOOL BLVAZIO SETA PARENTESES_FUNCAO
 %token AND OR DIF IGUAL
 %token MAIS_IGUAL MAIS_MAIS
 
@@ -143,11 +143,12 @@ CMD : CMD_LET ';'
     | CMD_VAR ';'
     | CMD_CONST ';'
     | CMD_IF
+    | CMD_WHILE
     | CMD_FUNC
     | RETURN E ';'
       { $$.c = $2.c + "'&retorno'" + "@" + "~"; }
-    /* | PRINT E ';' 
-      { $$.c = $2.c + "println" + "#"; } */
+    | RETURN OBJECT ';'
+      { $$.c = $2.c + "'&retorno'" + "@" + "~"; }
     | CMD_FOR
     | E ASM ';' 	{ $$.c = $1.c + $2.c + "^"; }
     | E ';'
@@ -167,57 +168,54 @@ EMPILHA_TS : { ts.push_back( map< string, Simbolo >{} ); }
            ;
    
 CMD_FUNC : FUNCTION ID { declara_var( Var, $2.c[0], $2.linha, $2.coluna ); } 
-             '(' EMPILHA_TS LISTA_ARGs ')' '{' CMDs '}'
+             '(' LISTA_ARGs ')' '{' { in_func++; } CMDs '}'
            { 
              string lbl_endereco_funcao = gera_label( "func_" + $2.c[0] );
              string definicao_lbl_endereco_funcao = ":" + lbl_endereco_funcao;
              
              $$.c = $2.c + "&" + $2.c + "{}"  + "=" + "'&funcao'" +
                     lbl_endereco_funcao + "[=]" + "^";
-             funcoes = funcoes + definicao_lbl_endereco_funcao + $6.c + $9.c +
+             funcoes = funcoes + definicao_lbl_endereco_funcao + $5.c + $9.c +
                        "undefined" + "@" + "'&retorno'" + "@"+ "~";
              ts.pop_back(); 
-             in_scope = false;
+             in_func--;
            }
          ;
 
          
 LISTA_ARGs : ARGs
-           | { $$.clear(); }
+           | { ts.push_back( map< string, Simbolo >{}); $$.c.clear(); }
            ;
            
 ARGs : ARGs ',' ARG  
        { // a & a arguments @ 0 [@] = ^ 
+         declara_var( Let, $3.c[0], $3.linha, $3.coluna ); 
          $$.c = $1.c + $3.c + "&" + $3.c + "arguments" + "@" + to_string( $1.n_args )
                 + "[@]" + "=" + "^"; 
-        in_scope = true; 
          if( $3.valor_default.size() > 0 ) {
            string lbl_true = gera_label( "lbl_true" );
            string lbl_fim_if = gera_label( "lbl_fim_if" );
            string definicao_lbl_true = ":" + lbl_true;
            string definicao_lbl_fim_if = ":" + lbl_fim_if;
-           $$.c = $$.c + declara_var( Var, "placeholder", 1, 1 ) + 
-                 $3.c + "@" + "placeholder" + "@" + "!=" +
-                 lbl_true + "?" + $3.c + $3.valor_default + "=" + "^" +
+           $$.c = $$.c + $3.c + "@" + "undefined" + "@" + "!=" +
+                 lbl_true + "?" + $3.c + $3.valor_default + "=" + "^" + 
                  lbl_fim_if + "#" +
-                 definicao_lbl_true + 
-                 definicao_lbl_fim_if
+                 definicao_lbl_true + definicao_lbl_fim_if
                  ;
          }
          $$.n_args = $1.n_args + $3.n_args; 
        }
      | ARG 
        { // a & a arguments @ 0 [@] = ^ 
+         ts.push_back( map< string, Simbolo >{});
+         declara_var( Let, $1.c[0], $1.linha, $1.coluna );
          $$.c = $1.c + "&" + $1.c + "arguments" + "@" + "0" + "[@]" + "=" + "^"; 
-                
-         in_scope = true; 
          if( $1.valor_default.size() > 0 ) {
            string lbl_true = gera_label( "lbl_true" );
            string lbl_fim_if = gera_label( "lbl_fim_if" );
            string definicao_lbl_true = ":" + lbl_true;
            string definicao_lbl_fim_if = ":" + lbl_fim_if;
-           $$.c = $$.c + declara_var( Var, "placeholder", 1, 1 ) + 
-                 $1.c + "@" + "placeholder" + "@" + "!=" +
+           $$.c = $$.c + $1.c + "@" + "undefined" + "@" + "!=" +
                  lbl_true + "?" + $1.c + $1.valor_default + "=" + "^" +
                  lbl_fim_if + "#" +
                  definicao_lbl_true + 
@@ -232,14 +230,14 @@ ARG : ID
       { $$.c = $1.c;      
         $$.n_args = 1;
         $$.valor_default.clear();
-        declara_var( Let, $1.c[0], $1.linha, $1.coluna ); 
+        // declara_var( Let, $1.c[0], $1.linha, $1.coluna ); 
       }
     | ID '=' E
       { // Código do IF
         $$.c = $1.c;
         $$.n_args = 1;
         $$.valor_default = $3.c;         
-        declara_var( Let, $1.c[0], $1.linha, $1.coluna ); 
+        // declara_var( Let, $1.c[0], $1.linha, $1.coluna ); 
       }
     ;
  
@@ -339,7 +337,7 @@ CMD_IF : IF '(' E ')' CMD ELSE CMD
                    ;}
        ;
 
-/* CMD_WHILE : WHILE '(' E ')' CMD
+CMD_WHILE : WHILE '(' E ')' CMD
             { string lbl_while_start = gera_label("while_start");
               string lbl_while_end = gera_label("while_end");
               string lbl_condicao_while = gera_label("while_true");
@@ -355,11 +353,8 @@ CMD_IF : IF '(' E ')' CMD ELSE CMD
                      definicao_lbl_while_end
             ;
             }
-          ; */
+          ;
 
-LVALUE : ID 
-       ;
-       
 LVALUEPROP : E '[' E ']'
               { $$.c = $1.c+ $3.c; }
            | E '.' ID  
@@ -380,28 +375,16 @@ PARAMs : PARAMs ',' E
          $$.n_args = $1.n_args + 1; }
      ;
 
-  E : /* LVALUE '=' '{' '}'
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "{}" + "="; }
-  | LVALUE '=' '[' ']' 
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "[]" + "="; } */
-  | LVALUE '=' E 
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "="; }
+  E : ID '=' E 
+    { if( in_func == 0 ) checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "="; }
   | LVALUEPROP '=' E
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "[=]"; }
-  /* | LVALUEPROP '=' '{' '}'
-  { checa_simbolo( $1.c[0], true ); $$.c = $1.c + vector<string>{"[]"} + "[=]"; }  */
-  /* | LVALUEPROP '=' '[' ']'
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + vector<string>{"[]"} + "[=]"; }  */
-  | LVALUE MAIS_IGUAL E
+    { if( in_func == 0 ) checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "[=]"; }
+  | ID MAIS_IGUAL E
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "@" + $3.c + "+" + "="; }
   | LVALUEPROP MAIS_IGUAL E
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "[@]" + $3.c + "+" + "[=]"; }
-  | LVALUE MAIS_MAIS
+  | ID MAIS_MAIS
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "@" + $1.c + $1.c + "@" + "1" + "+" + "=" + "^"; }
-  | LVALUE IGUAL E
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "@" + $3.c + "==";}   
-  | LVALUE DIF E     
-    { $$.c = $1.c + $3.c + "!="; }
   | E IGUAL E
     { $$.c = $1.c + $3.c + "=="; }
   | E DIF E     
@@ -434,24 +417,59 @@ PARAMs : PARAMs ',' E
     { $$.c = $1.c; }
   | BOOL
     { $$.c = $1.c; }
-  /* | CMD_FUNC */
-  | LVALUE
-    { if(!in_scope) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "@"; } 
+  | ID
+    { if( in_func == 0 ) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "@"; } 
   | LVALUEPROP 
-    { if(!in_scope) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "[@]"; }  
+    { if( in_func == 0 ) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "[@]"; }  
+  | ID EMPILHA_TS { declara_var( Let, $1.c[0], $1.linha, $1.coluna ); } SETA E 
+    { 
+      string lbl_endereco_funcao = gera_label( "func_" + $1.c[0] );
+      string definicao_lbl_endereco_funcao = ":" + lbl_endereco_funcao;
+      
+      $$.c = "{}" + vector<string>{ "'&funcao'" } + lbl_endereco_funcao + "[<=]";
+      funcoes = funcoes + definicao_lbl_endereco_funcao + $1.c + "&" + $1.c + 
+                "arguments" + "@" + "0" + "[@]" + "=" + "^" + $5.c + 
+                "'retorno'" + "@"+ "~";
+      ts.pop_back(); 
+      in_func--;  
+    }
+  | '('  LISTA_ARGs PARENTESES_FUNCAO SETA E 
+    { 
+      string lbl_endereco_funcao = gera_label( "func_" );
+      string definicao_lbl_endereco_funcao = ":" + lbl_endereco_funcao;
+      
+      $$.c = vector<string>{ "{}" } + vector<string>{ "'&funcao'" } +
+            lbl_endereco_funcao + vector<string>{ "[<=]" };
+      funcoes = funcoes + definicao_lbl_endereco_funcao + $2.c + $5.c +
+                 + "'&retorno'" + "@"+ "~"; 
+      // in_func--;
+      ts.pop_back(); 
+    }
   | '(' E ')'
     { $$.c = $2.c; }
   | '(' OBJECT ')'
     { $$.c = $2.c; }
   | ARRAY
-  /* |'{' '}'
-    { $$.c = vector<string>{"{}"}; }
-  | '[' ']'
-    { $$.c = vector<string>{"[]"}; }  */
+  | '['']' 
+    { $$.c = vector<string>{"[]"}; }
   ;
+
+  ANONYM_FUNC : FUNCTION '(' LISTA_ARGs ')' '{' CMDs '}'
+                {
+                  string lbl_endereco_funcao = gera_label( "func_" + $2.c[0] );
+                  string definicao_lbl_endereco_funcao = ":" + lbl_endereco_funcao;
+                  
+                  $$.c = $2.c + "&" + $2.c + "{}"  + "=" + "'&funcao'" +
+                          lbl_endereco_funcao + "[=]" + "^";
+                  funcoes = funcoes + definicao_lbl_endereco_funcao + $5.c + $9.c +
+                            "undefined" + "@" + "'&retorno'" + "@"+ "~";
+                  ts.pop_back(); 
+                  in_func--;
+                }
 
   OBJECT : '{' OBJECT_PROPs '}'
            { $$.c = "{}" + $2.c; }
+          | BLVAZIO
            ;
   
   OBJECT_PROP : ID ':' E
@@ -470,6 +488,7 @@ PARAMs : PARAMs ',' E
           ;
 
   ARRAY_ELEM : E
+             | OBJECT
              ;
 
   ARRAY_ELEMs : ARRAY_ELEMs ',' ARRAY_ELEM
@@ -485,8 +504,6 @@ PARAMs : PARAMs ',' E
 #include "lex.yy.c"
 
 vector<string> declara_var( TipoDecl tipo, string nome, int linha, int coluna ) {
-//  cerr << "insere_simbolo( " << tipo << ", " << nome 
-//       << ", " << linha << ", " << coluna << ")" << endl;
        
   auto& topo = ts.back();    
        
