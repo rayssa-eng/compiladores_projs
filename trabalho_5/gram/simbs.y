@@ -18,7 +18,8 @@ struct Atributos {
   int linha = 0, coluna = 0;
 
   // Só para argumentos e parâmetros
-  int n_args = 0; 
+  int n_args = 0;
+  int rmv_from_stack = 1; 
   
   // Só para valor default de argumento        
   vector<string> valor_default; 
@@ -29,6 +30,7 @@ struct Atributos {
     linha = 0;
     coluna = 0;
     n_args = 0;
+    rmv_from_stack = 1;
   }
 };
 
@@ -46,13 +48,13 @@ struct Simbolo {
 };
 
 int in_func = 0;
-// bool in_scope = false;
 
 // Tabela de símbolos - agora é uma pilha
 vector< map< string, Simbolo > > ts = { map< string, Simbolo >{} }; 
 vector<string> funcoes;
 
 vector<string> declara_var( TipoDecl tipo, string nome, int linha, int coluna );
+void checa_retorno( int in_func );
 void checa_simbolo( string nome, bool modificavel );
 
 
@@ -115,11 +117,11 @@ void print( vector<string> codigo ) {
 %}
 
 %token IF ELSE FOR WHILE LET CONST VAR FUNCTION ASM RETURN
-%token ID CDOUBLE CSTRING CINT BOOL BLVAZIO SETA PARENTESES_FUNCAO
+%token ID CDOUBLE CSTRING CINT BOOL BLVAZIO SETA PARENTESES_FUNCAO CHAVES_FUNCAO
 %token AND OR DIF IGUAL
 %token MAIS_IGUAL MAIS_MAIS
 
-%right '='
+%right '=' SETA
 %nonassoc IF ELSE IGUAL MAIS_IGUAL MAIS_MAIS MA_IG ME_IG DIF
 %nonassoc '<' '>' 
 %left AND OR
@@ -146,13 +148,13 @@ CMD : CMD_LET ';'
     | CMD_WHILE
     | CMD_FUNC
     | RETURN E ';'
-      { $$.c = $2.c + "'&retorno'" + "@" + "~"; }
+      { checa_retorno( in_func ); $$.c = $2.c + "'&retorno'" + "@" + "~"; }
     | RETURN OBJECT ';'
       { $$.c = $2.c + "'&retorno'" + "@" + "~"; }
     | CMD_FOR
     | E ASM ';' 	{ $$.c = $1.c + $2.c + "^"; }
     | E ';'
-      { $$.c = $1.c + "^"; };
+      { $1.rmv_from_stack ? $$.c = $1.c + "^" :  $$.c = $1.c; };
     | ';'
       { $$.clear(); };
     | '{' EMPILHA_TS CMDs '}'
@@ -376,9 +378,9 @@ PARAMs : PARAMs ',' E
      ;
 
   E : ID '=' E 
-    { if( in_func == 0 ) checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "="; }
+    { if( !in_func ) checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "="; }
   | LVALUEPROP '=' E
-    { if( in_func == 0 ) checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "[=]"; }
+    { if( !in_func ) checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "[=]"; }
   | ID MAIS_IGUAL E
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "@" + $3.c + "+" + "="; }
   | LVALUEPROP MAIS_IGUAL E
@@ -418,50 +420,67 @@ PARAMs : PARAMs ',' E
   | BOOL
     { $$.c = $1.c; }
   | ID
-    { if( in_func == 0 ) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "@"; } 
+    { if( !in_func ) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "@"; } 
   | LVALUEPROP 
-    { if( in_func == 0 ) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "[@]"; }  
-  | ID EMPILHA_TS { declara_var( Let, $1.c[0], $1.linha, $1.coluna ); } SETA E 
+    { if( !in_func ) checa_simbolo( $1.c[0], false ); $$.c = $1.c + "[@]"; }
+  | ANONYM_FUNC  
+  | ID_EMPILHA_TS SETA E 
     { 
       string lbl_endereco_funcao = gera_label( "func_" + $1.c[0] );
       string definicao_lbl_endereco_funcao = ":" + lbl_endereco_funcao;
       
       $$.c = "{}" + vector<string>{ "'&funcao'" } + lbl_endereco_funcao + "[<=]";
+      $$.rmv_from_stack = 0;
       funcoes = funcoes + definicao_lbl_endereco_funcao + $1.c + "&" + $1.c + 
-                "arguments" + "@" + "0" + "[@]" + "=" + "^" + $5.c + 
-                "'retorno'" + "@"+ "~";
-      ts.pop_back(); 
+                "arguments" + "@" + "0" + "[@]" + "=" + "^" + $3.c + 
+                "'&retorno'" + "@"+ "~";
       in_func--;  
+      ts.pop_back(); 
     }
-  | '('  LISTA_ARGs PARENTESES_FUNCAO SETA E 
+  | '(' LISTA_ARGs PARENTESES_FUNCAO SETA E 
     { 
       string lbl_endereco_funcao = gera_label( "func_" );
       string definicao_lbl_endereco_funcao = ":" + lbl_endereco_funcao;
       
       $$.c = vector<string>{ "{}" } + vector<string>{ "'&funcao'" } +
             lbl_endereco_funcao + vector<string>{ "[<=]" };
+      $$.rmv_from_stack = 0;
       funcoes = funcoes + definicao_lbl_endereco_funcao + $2.c + $5.c +
                  + "'&retorno'" + "@"+ "~"; 
-      // in_func--;
+      ts.pop_back(); 
+    }
+  | ID_EMPILHA_TS CHAVES_FUNCAO CMDs '}'
+    {
+      string lbl_endereco_funcao = gera_label( "func_" + $1.c[0] );
+      string definicao_lbl_endereco_funcao = ":" + lbl_endereco_funcao;
+      
+      $$.c = "{}" + vector<string>{ "'&funcao'" } + lbl_endereco_funcao + "[<=]";
+      $$.rmv_from_stack = 0;
+      funcoes = funcoes + definicao_lbl_endereco_funcao + $1.c + "&" + $1.c + 
+                "arguments" + "@" + "0" + "[@]" + "=" + "^" + $3.c + 
+                "'&retorno'" + "@"+ "~";
+      in_func--;  
       ts.pop_back(); 
     }
   | '(' E ')'
-    { $$.c = $2.c; }
+    { $$.c = $2.c; $$.rmv_from_stack = 0;}
   | '(' OBJECT ')'
-    { $$.c = $2.c; }
+    { $$.c = $2.c; $$.rmv_from_stack = 0;}
   | ARRAY
   | '['']' 
     { $$.c = vector<string>{"[]"}; }
   ;
 
-  ANONYM_FUNC : FUNCTION '(' LISTA_ARGs ')' '{' CMDs '}'
+  ID_EMPILHA_TS : ID EMPILHA_TS 
+                  { declara_var( Let, $1.c[0], $1.linha, $1.coluna ); in_func++; }
+
+  ANONYM_FUNC : FUNCTION { in_func++; } '(' LISTA_ARGs ')' '{' CMDs '}'
                 {
-                  string lbl_endereco_funcao = gera_label( "func_" + $2.c[0] );
+                  string lbl_endereco_funcao = gera_label( "func_" );
                   string definicao_lbl_endereco_funcao = ":" + lbl_endereco_funcao;
                   
-                  $$.c = $2.c + "&" + $2.c + "{}"  + "=" + "'&funcao'" +
-                          lbl_endereco_funcao + "[=]" + "^";
-                  funcoes = funcoes + definicao_lbl_endereco_funcao + $5.c + $9.c +
+                  $$.c = "{}" + vector<string>{ "'&funcao'" } + lbl_endereco_funcao + "[<=]";
+                  funcoes = funcoes + definicao_lbl_endereco_funcao + $4.c + $7.c +
                             "undefined" + "@" + "'&retorno'" + "@"+ "~";
                   ts.pop_back(); 
                   in_func--;
@@ -519,6 +538,14 @@ vector<string> declara_var( TipoDecl tipo, string nome, int linha, int coluna ) 
     cerr << "Erro: a variável '" << nome << "' já foi declarada na linha " << topo[nome].linha << "." << endl;
     exit( 1 );     
   }
+}
+
+void checa_retorno(int in_func) {
+  if ( !in_func ) {
+    cerr << "Erro: Não é permitido 'return' fora de funções." << endl;
+    exit( 1 ); 
+  }
+  else return;
 }
 
 void checa_simbolo( string nome, bool modificavel ) {

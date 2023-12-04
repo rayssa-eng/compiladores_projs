@@ -11,7 +11,6 @@ DOUBLE  {D}+"."{D}+([Ee][+\-]?{D}+)?
 ID      {L}({L}|{D})*
 BOOLEAN    "true"|"false"
 BL_VAZIO \{\s*\}
-PARENTESESFUNCAO ")"\.*"=>"
 
 %%
 
@@ -46,7 +45,8 @@ PARENTESESFUNCAO ")"\.*"=>"
 "function"          { return token( FUNCTION ); }
 "return"            { return token( RETURN ); }
 {BL_VAZIO}          { return token( BLVAZIO ); }
-{PARENTESESFUNCAO} { return token( PARENTESES_FUNCAO );}
+")"/.*"=>"          { return token( PARENTESES_FUNCAO );}
+"=> {"              { return token( CHAVES_FUNCAO ); }
 {ID}                { return token( ID ); }
 
 "\""[^\"]*"\"" { yylval.c = vector<string>{ string(yytext + 1, yyleng - 2) }; return token(CSTRING); } { yylval.c = vector<string>{ string(yytext + 1, yyleng - 2) }; return token(CSTRING); }
