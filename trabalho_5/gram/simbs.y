@@ -379,14 +379,16 @@ PARAMs : PARAMs ',' E
 
   E : ID '=' E 
     { if( !in_func ) checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "="; }
-  | LVALUEPROP '=' E
-    { if( !in_func ) checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "[=]"; }
-  | ID MAIS_IGUAL E
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "@" + $3.c + "+" + "="; }
-  | LVALUEPROP MAIS_IGUAL E
-    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "[@]" + $3.c + "+" + "[=]"; }
+  | ID '=' OBJECT
+    { if( !in_func ) checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "="; }
   | ID MAIS_MAIS
     { checa_simbolo( $1.c[0], true ); $$.c = $1.c + "@" + $1.c + $1.c + "@" + "1" + "+" + "=" + "^"; }
+  | ID MAIS_IGUAL E
+    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "@" + $3.c + "+" + "="; }
+  | LVALUEPROP '=' E
+    { if( !in_func ) checa_simbolo( $1.c[0], true ); $$.c = $1.c + $3.c + "[=]"; }
+  | LVALUEPROP MAIS_IGUAL E
+    { checa_simbolo( $1.c[0], true ); $$.c = $1.c + $1.c + "[@]" + $3.c + "+" + "[=]"; }
   | E IGUAL E
     { $$.c = $1.c + $3.c + "=="; }
   | E DIF E     
